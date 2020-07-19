@@ -1,2 +1,2 @@
 # HBase-OSS
-HBase+Spring Boot分布式文件存储
+Spring Boot+HBase分布式文件存储
