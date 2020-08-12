@@ -14,7 +14,7 @@ CREATE TABLE user_info
   user_id     VARCHAR(32) NOT NULL,
   user_name   VARCHAR(32) NOT NULL,
   password    VARCHAR(64) NOT NULL COMMENT 'password md5',
-  system_role VARCHAR(32) NOT NULL COMMENT 'admin or user',
+  system_role VARCHAR(32) NOT NULL COMMENT 'admin or usermgr',
   create_time TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   detail      VARCHAR(256),
   PRIMARY KEY (user_id),
