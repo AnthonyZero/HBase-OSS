@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS hbase_os
+CREATE DATABASE IF NOT EXISTS hbase_oss
   DEFAULT CHARACTER SET UTF8
   COLLATE UTF8_GENERAL_CI;
 
-USE hbase_os;
+USE hbase_oss;
 
 --
 -- Table structure for table `user_info`
