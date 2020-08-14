@@ -32,19 +32,19 @@
     </update>
 
     <delete id="deleteUser">
-      delete from user_info where user_id=#{userId}
+        delete from user_info where user_id=#{userId}
     </delete>
 
     <select id="getUserInfo" resultMap="userInfoResultMap">
-      select * from user_info where user_id=#{userId}
+        select * from user_info where user_id=#{userId}
     </select>
 
     <select id="checkPassword" resultMap="userInfoResultMap">
-      select * from user_info
-      where password=#{password} and user_name=#{userName}
+        select * from user_info
+        where password=#{password} and user_name=#{userName}
     </select>
 
     <select id="getUserInfoByName" resultMap="userInfoResultMap">
-      select * from user_info where user_name=#{userName}
+        select * from user_info where user_name=#{userName}
     </select>
 </mapper>

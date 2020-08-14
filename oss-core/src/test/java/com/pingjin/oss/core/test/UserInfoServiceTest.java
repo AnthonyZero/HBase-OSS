@@ -1,13 +1,11 @@
 package com.pingjin.oss.core.test;
 
-import com.pingjin.oss.core.usermgr.dao.UserInfoMapper;
 import com.pingjin.oss.core.usermgr.model.SystemRole;
 import com.pingjin.oss.core.usermgr.model.UserInfo;
 import com.pingjin.oss.core.usermgr.service.UserInfoService;
 import com.pingjin.oss.mybatis.test.BaseTest;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * 测试
@@ -15,7 +13,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 public class UserInfoServiceTest extends BaseTest {
 
     @Autowired
-    @Qualifier("userInfoServiceImpl")
     private UserInfoService userInfoService;
 
     @Test

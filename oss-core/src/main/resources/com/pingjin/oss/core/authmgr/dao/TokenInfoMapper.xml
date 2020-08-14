@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.pingjin.oss.core.authmgr.dao.TokenInfoMapper">
+    <resultMap id="tokenInfoResultMap" type="com.pingjin.oss.core.authmgr.model.TokenInfo">
+      <id column="token" property="token"/>
+      <result column="expire_time" property="expireTime"/>
+      <result column="refresh_time" property="refreshTime"/>
+      <result column="active" property="active"/>
+      <result column="creator" property="creator"/>
+      <result column="create_time" property="createTime"/>
+    </resultMap>
+    <insert id="addToken">
+        insert into token_info
+        (token,expire_time,refresh_time,active,creator,create_time)
+        values
+        (#{token.token},#{token.expireTime},#{token.refreshTime}
+        ,#{token.active},#{token.creator},#{token.createTime})
+    </insert>
+
+    <update id="updateToken">
+        update token_info set expire_time=#{expireTime},active=#{isActive}
+        where token=#{token}
+    </update>
+
+    <update id="refreshToken">
+        update token_info set refresh_time=#{refreshTime}
+        where token=#{token}
+    </update>
+
+    <delete id="deleteToken">
+        delete from token_info where token=#{token}
+    </delete>
+
+    <select id="getTokenInfo" resultMap="tokenInfoResultMap">
+        select * from token_info where token=#{token}
+    </select>
+
+    <select id="getTokenInfoList" resultMap="tokenInfoResultMap">
+        select * from token_info where creator=#{creator}
+    </select>
+</mapper>
