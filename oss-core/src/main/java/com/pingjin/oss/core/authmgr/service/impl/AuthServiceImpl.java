@@ -74,7 +74,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public boolean deleteToken(String token) {
         tokenInfoMapper.deleteToken(token);
-        //todo delete auth
         serviceAuthMapper.deleteAuthByToken(token);
         return true;
     }
