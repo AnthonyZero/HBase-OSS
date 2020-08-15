@@ -45,12 +45,12 @@ CREATE TABLE token_info
   COMMENT = 'token信息表';
 
 --
--- Table structure for table `os_bucket`
+-- Table structure for table `oss_bucket`
 --
 
-DROP TABLE IF EXISTS os_bucket;
+DROP TABLE IF EXISTS oss_bucket;
 
-CREATE TABLE os_bucket (
+CREATE TABLE oss_bucket (
   bucket_id  VARCHAR(32),
   bucket_name VARCHAR(32),
   create_time TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
