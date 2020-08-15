@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.pingjin.oss.server.dao.BucketMapper">
+    <resultMap id="bucketResultMap" type="com.pingjin.oss.common.BucketModel">
+        <id column="bucket_id" property="bucketId"/>
+        <result column="bucket_name" property="bucketName"/>
+        <result column="detail" property="detail"/>
+        <result column="creator" property="creator"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="addBucket">
+        insert into oss_bucket
+        (bucket_id,bucket_name,creator,detail,create_time)
+        values
+        (#{bucket.bucketId},#{bucket.bucketName},#{bucket.creator}
+        ,#{bucket.detail},#{bucket.createTime})
+    </insert>
+
+    <update id="updateBucket">
+        update oss_bucket set bucket_name=#{bucketName}
+        <if test="detail != null and detail != '' ">
+          , detail=#{detail}
+        </if>
+        where bucket_name=#{bucketName}
+    </update>
+
+    <delete id="deleteBucket">
+        delete from oss_bucket where bucket_name=#{bucketName}
+    </delete>
+
+    <select id="getBucket" resultMap="bucketResultMap">
+        select * from oss_bucket where bucket_id=#{bucketId}
+    </select>
+
+    <select id="getBucketByName" resultMap="bucketResultMap">
+        select * from oss_bucket where bucket_name=#{bucketName}
+    </select>
+
+    <select id="getBucketByCreator" resultMap="bucketResultMap">
+        select * from oss_bucket where creator=#{creator}
+    </select>
+
+    <select id="getUserAuthorizedBuckets" resultMap="bucketResultMap">
+        select b.* from oss_bucket b,service_auth s where
+        s.target_token=#{token} and s.bucket_name= b.bucket_name
+    </select>
+</mapper>
