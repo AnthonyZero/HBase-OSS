@@ -282,7 +282,7 @@ public class HBaseService {
     }
 
     /**
-     * getRow.
+     * 读取行
      */
     public static Result getRow(Connection connection, String tableName, String row,
         FilterList filterList) {
@@ -300,7 +300,7 @@ public class HBaseService {
     }
 
     /**
-     * getRow.
+     * 读取行
      */
     public static Result getRow(Connection connection, String tableName, Get get) {
         Result rs;
@@ -315,7 +315,7 @@ public class HBaseService {
     }
 
     /**
-     * getRow.
+     * 读取行
      */
     public static Result getRow(Connection connection, String tableName, String row) {
         Result rs;
@@ -331,7 +331,7 @@ public class HBaseService {
     }
 
     /**
-     * getRow.
+     * 读取行
      */
     public static Result getRow(Connection connection, String tableName, String row, byte[] column,
         byte[] qualifier) {
