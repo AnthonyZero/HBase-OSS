@@ -162,17 +162,17 @@ public class HBaseService {
      * 扫描整张表，记得释放rs.
      */
     public static ResultScanner scanner(Connection connection, String tableName) {
-      ResultScanner results = null;
-      try (Table table = connection.getTable(TableName.valueOf(tableName))) {
-        Scan scan = new Scan();
-        scan.setCaching(1000);
-        results = table.getScanner(scan);
-      } catch (IOException e) {
-        String msg = String
-            .format("scan table=%s error. msg=%s", tableName, e.getMessage());
-        throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
-      }
-      return results;
+        ResultScanner results = null;
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
+            Scan scan = new Scan();
+            scan.setCaching(1000);
+            results = table.getScanner(scan);
+        } catch (IOException e) {
+            String msg = String
+                .format("scan table=%s error. msg=%s", tableName, e.getMessage());
+            throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
+        }
+        return results;
     }
 
     /**
@@ -180,7 +180,7 @@ public class HBaseService {
      */
     public static ResultScanner scanner(Connection connection, String tableName, String startRowKey,
         String stopRowKey) {
-      return scanner(connection, tableName, Bytes.toBytes(startRowKey), Bytes.toBytes(stopRowKey));
+        return scanner(connection, tableName, Bytes.toBytes(startRowKey), Bytes.toBytes(stopRowKey));
     }
 
     /**
@@ -188,19 +188,19 @@ public class HBaseService {
      */
     public static ResultScanner scanner(Connection connection, String tableName, byte[] startRowKey,
         byte[] stopRowKey) {
-      ResultScanner results = null;
-      try (Table table = connection.getTable(TableName.valueOf(tableName))) {
-        Scan scan = new Scan();
-        scan.setStartRow(startRowKey);
-        scan.setStopRow(stopRowKey);
-        scan.setCaching(1000);
-        results = table.getScanner(scan);
-      } catch (IOException e) {
-        String msg = String
-            .format("scan table=%s error. msg=%s", tableName, e.getMessage());
-        throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
-      }
-      return results;
+        ResultScanner results = null;
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
+            Scan scan = new Scan();
+            scan.setStartRow(startRowKey);
+            scan.setStopRow(stopRowKey);
+            scan.setCaching(1000);
+            results = table.getScanner(scan);
+        } catch (IOException e) {
+            String msg = String
+                .format("scan table=%s error. msg=%s", tableName, e.getMessage());
+            throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
+        }
+        return results;
     }
 
     /**
@@ -208,18 +208,18 @@ public class HBaseService {
      */
     public static ResultScanner scanner(Connection connection, String tableName,
         FilterList filterList) {
-      ResultScanner results = null;
-      try (Table table = connection.getTable(TableName.valueOf(tableName))) {
-        Scan scan = new Scan();
-        scan.setCaching(1000);
-        scan.setFilter(filterList);
-        results = table.getScanner(scan);
-      } catch (IOException e) {
-        String msg = String
-            .format("scan table=%s error. msg=%s", tableName, e.getMessage());
-        throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
-      }
-      return results;
+        ResultScanner results = null;
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
+            Scan scan = new Scan();
+            scan.setCaching(1000);
+            scan.setFilter(filterList);
+            results = table.getScanner(scan);
+        } catch (IOException e) {
+            String msg = String
+                .format("scan table=%s error. msg=%s", tableName, e.getMessage());
+            throw new OssServerException(ErrorCodes.ERROR_HBASE, msg);
+        }
+        return results;
     }
 
     /**
@@ -363,14 +363,14 @@ public class HBaseService {
             List<Get> gets = null;
             gets = new ArrayList<Get>();
             for (String row : rows) {
-              if (row != null) {
-                Get g = new Get(Bytes.toBytes(row));
-                g.setFilter(filterList);
-                gets.add(g);
-              }
+                if (row != null) {
+                    Get g = new Get(Bytes.toBytes(row));
+                    g.setFilter(filterList);
+                    gets.add(g);
+                }
             }
             if (gets.size() > 0) {
-              results = table.get(gets);
+                results = table.get(gets);
             }
         } catch (IOException e) {
             String msg = String
@@ -394,13 +394,13 @@ public class HBaseService {
             List<Get> gets = null;
             gets = new ArrayList<Get>();
             for (String row : rows) {
-              if (row != null) {
-                Get g = new Get(Bytes.toBytes(row));
-                gets.add(g);
-              }
+                if (row != null) {
+                    Get g = new Get(Bytes.toBytes(row));
+                    gets.add(g);
+                }
             }
             if (gets.size() > 0) {
-              results = table.get(gets);
+                results = table.get(gets);
             }
         } catch (IOException e) {
             String msg = String
@@ -410,6 +410,7 @@ public class HBaseService {
         return results;
     }
 
+    //生成目录的seqid
     public static long incrementColumnValue(Connection connection, String tableName, String row,
         byte[] columnFamily, byte[] qualifier, int num) {
         try (Table table = connection.getTable(TableName.valueOf(tableName))) {
@@ -433,8 +434,7 @@ public class HBaseService {
      * @return success of failed
      */
     public static boolean putRow(Connection connection, String tableName, String row,
-        String columnFamily,
-        String qualifier, String data) {
+        String columnFamily, String qualifier, String data) {
         try {
             Put put = new Put(Bytes.toBytes(row));
             put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(qualifier),
@@ -467,7 +467,6 @@ public class HBaseService {
      * @return success of failed
      */
     public static boolean putRows(Connection connection, String tableName, List<Put> puts) {
-        long currentTime = System.currentTimeMillis();
         final BufferedMutator.ExceptionListener listener = new BufferedMutator.ExceptionListener() {
             @Override
           public void onException(RetriesExhaustedWithDetailsException e, BufferedMutator mutator) {
