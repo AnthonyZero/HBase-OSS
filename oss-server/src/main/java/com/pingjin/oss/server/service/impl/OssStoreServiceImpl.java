@@ -149,29 +149,37 @@ public class OssStoreServiceImpl implements OssStoreService {
         }
     }
 
+    /**
+     * 获取基础属性
+     * @param bucket
+     * @param key
+     * @return
+     * @throws IOException
+     */
     @Override
     public OssObjectSummary getSummary(String bucket, String key) throws IOException {
-      if (key.endsWith("/")) {
-        Result result = HBaseService
-            .getRow(connection, OssUtil.getDirTableName(bucket), key);
-        if (!result.isEmpty()) {
-          return this.dirObjectToSummary(result, bucket, key);
-        } else {
-          return null;
+        //判断是否是文件夹
+        if (key.endsWith("/")) {
+            Result result = HBaseService.getRow(connection, OssUtil.getDirTableName(bucket), key);
+            if (!result.isEmpty()) {
+                return this.dirObjectToSummary(result, bucket, key);
+            } else {
+                return null;
+            }
         }
-      }
-      String dir = key.substring(0, key.lastIndexOf("/") + 1);
-      String seq = this.getDirSeqId(bucket, dir);
-      if (seq == null) {
-        return null;
-      }
-      String objKey = seq + "_" + key.substring(key.lastIndexOf("/") + 1);
-      Result result = HBaseService
-          .getRow(connection, OssUtil.getObjTableName(bucket), objKey);
-      if (result.isEmpty()) {
-        return null;
-      }
-      return this.resultToObjectSummary(result, bucket, dir);
+        //获取文件属性
+        String dir = key.substring(0, key.lastIndexOf("/") + 1); //获取父目录
+        String seq = this.getDirSeqId(bucket, dir); //父目录的seqid
+        if (seq == null) {
+            //父目录不存在
+            return null;
+        }
+        String objKey = seq + "_" + key.substring(key.lastIndexOf("/") + 1); //文件的rowkey
+        Result result = HBaseService.getRow(connection, OssUtil.getObjTableName(bucket), objKey);
+        if (result.isEmpty()) {
+            return null;
+        }
+        return this.resultToObjectSummary(result, bucket, dir);
     }
 
     @Override
@@ -537,48 +545,49 @@ public class OssStoreServiceImpl implements OssStoreService {
       }
     }
 
+    //读取文件的属性  转化为OssObjectSummary
     private OssObjectSummary resultToObjectSummary(Result result, String bucket, String dir)
         throws IOException {
-      OssObjectSummary summary = new OssObjectSummary();
-      long timestamp = result.rawCells()[0].getTimestamp();
-      summary.setLastModifyTime(timestamp);
-      String id = new String(result.getRow());
-      summary.setId(id);
-      String name = id.split("_", 2)[1];
-      String key = dir + name;
-      summary.setKey(key);
-      summary.setName(name);
-      summary.setBucket(bucket);
-      String s = Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-          OssUtil.OBJ_PROPS_QUALIFIER));
-      if (s != null) {
-        summary.setAttrs(JsonUtil.fromJson(Map.class, s));
-      }
-      summary.setLength(Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-          OssUtil.OBJ_LEN_QUALIFIER)));
-      summary
-          .setMediaType(Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-              OssUtil.OBJ_MEDIATYPE_QUALIFIER)));
+        OssObjectSummary summary = new OssObjectSummary();
+        long timestamp = result.rawCells()[0].getTimestamp();
+        summary.setLastModifyTime(timestamp);
+        String id = new String(result.getRow());
+        summary.setId(id); //文件的rowkey （目录seqid_文件名）
+        String name = id.split("_", 2)[1]; //文件名
+        String key = dir + name; //文件全路径
+        summary.setKey(key);
+        summary.setName(name);
+        summary.setBucket(bucket);
+        //cf:p
+        String s = Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_PROPS_QUALIFIER));
+        if (s != null) {
+            summary.setAttrs(JsonUtil.fromJson(Map.class, s)); //文件属性
+        }
+        //cf:l
+        summary.setLength(Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_LEN_QUALIFIER)));
+        //cf:m
+        summary.setMediaType(Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_MEDIATYPE_QUALIFIER)));
 
-      return summary;
+        return summary;
     }
 
+    //读取文件夹的属性 转化为OssObjectSummary
     private OssObjectSummary dirObjectToSummary(Result result, String bucket, String dir) {
-      OssObjectSummary summary = new OssObjectSummary();
-      String id = Bytes.toString(result.getRow());
-      summary.setId(id);
-      summary.setAttrs(new HashMap<>(0));
-      if (dir.length() > 1) {
-        summary.setName(dir.substring(dir.lastIndexOf("/") + 1));
-      } else {
-        summary.setName("");
-      }
-      summary.setBucket(bucket);
-      summary.setKey(dir);
-      summary.setLastModifyTime(result.rawCells()[0].getTimestamp());
-      summary.setLength(0);
-      summary.setMediaType("");
-      return summary;
+        OssObjectSummary summary = new OssObjectSummary();
+        String id = Bytes.toString(result.getRow());
+        summary.setId(id); //rowkey
+        summary.setAttrs(new HashMap<>(0));
+        if (dir.length() > 1) {
+            summary.setName(dir.substring(dir.lastIndexOf("/") + 1));
+        } else {
+            summary.setName("");
+        }
+        summary.setBucket(bucket);
+        summary.setKey(dir);
+        summary.setLastModifyTime(result.rawCells()[0].getTimestamp());
+        summary.setLength(0);
+        summary.setMediaType("");
+        return summary;
     }
 
     //副本数量
