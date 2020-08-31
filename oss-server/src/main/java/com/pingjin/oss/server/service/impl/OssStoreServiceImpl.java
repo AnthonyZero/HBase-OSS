@@ -183,6 +183,61 @@ public class OssStoreServiceImpl implements OssStoreService {
     }
 
     @Override
+    public OssObject getObject(String bucket, String key) throws IOException {
+        if (key.endsWith("/")) {
+            //读取目录
+            Result result = HBaseService.getRow(connection, OssUtil.getDirTableName(bucket), key);
+            if (result.isEmpty()) {
+                return null;
+            }
+            ObjectMetaData metaData = new ObjectMetaData();
+            metaData.setBucket(bucket);
+            metaData.setKey(key);
+            metaData.setLastModifyTime(result.rawCells()[0].getTimestamp());
+            metaData.setLength(0);
+            OssObject object = new OssObject();
+            object.setMetaData(metaData);
+            return object;
+        }
+        //读取文件
+        String dir = key.substring(0, key.lastIndexOf("/") + 1);
+        String name = key.substring(key.lastIndexOf("/") + 1); //文件名
+        String seq = this.getDirSeqId(bucket, dir); //父目录seqId
+        String objKey = seq + "_" + name;
+        Result result = HBaseService.getRow(connection, OssUtil.getObjTableName(bucket), objKey);
+        if (result.isEmpty()) {
+            return null;
+        }
+        OssObject object = new OssObject();
+        //文件内容 （c:c）
+        if (result.containsNonEmptyColumn(OssUtil.OBJ_CONT_CF_BYTES, OssUtil.OBJ_CONT_QUALIFIER)) {
+            //从hbase中读文件内容
+            ByteArrayInputStream bas = new ByteArrayInputStream(
+                    result.getValue(OssUtil.OBJ_CONT_CF_BYTES, OssUtil.OBJ_CONT_QUALIFIER));
+            object.setContent(bas);
+        } else {
+            //从hdfs中读文件内容
+            String fileDir = OssUtil.FILE_STORE_ROOT + "/" + bucket + "/" + seq;
+            InputStream inputStream = this.fileStore.openFile(fileDir, name);
+            object.setContent(inputStream);
+        }
+        //文件属性 metaData （cf列族）
+        long len = Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_LEN_QUALIFIER));
+        ObjectMetaData metaData = new ObjectMetaData();
+        metaData.setBucket(bucket);
+        metaData.setKey(key);
+        metaData.setLastModifyTime(result.rawCells()[0].getTimestamp());
+        metaData.setLength(len);
+        metaData.setMediaType(Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_MEDIATYPE_QUALIFIER)));
+        byte[] b = result.getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_PROPS_QUALIFIER);
+        if (b != null) {
+            metaData.setAttrs(JsonUtil.fromJson(Map.class, Bytes.toString(b)));
+        }
+        object.setMetaData(metaData);
+        return object;
+    }
+
+    @Override
     public List<OssObjectSummary> list(String bucket, String startKey, String endKey)
         throws IOException {
 
@@ -404,62 +459,7 @@ public class OssStoreServiceImpl implements OssStoreService {
       return listResult;
     }
 
-    @Override
-    public OssObject getObject(String bucket, String key) throws IOException {
-      if (key.endsWith("/")) {
-        Result result = HBaseService
-            .getRow(connection, OssUtil.getDirTableName(bucket), key);
-        if (result.isEmpty()) {
-          return null;
-        }
-        ObjectMetaData metaData = new ObjectMetaData();
-        metaData.setBucket(bucket);
-        metaData.setKey(key);
-        metaData.setLastModifyTime(result.rawCells()[0].getTimestamp());
-        metaData.setLength(0);
-        OssObject object = new OssObject();
-        object.setMetaData(metaData);
-        return object;
-      }
-      String dir = key.substring(0, key.lastIndexOf("/") + 1);
-      String name = key.substring(key.lastIndexOf("/") + 1);
-      String seq = this.getDirSeqId(bucket, dir);
-      String objKey = seq + "_" + name;
-      Result result = HBaseService
-          .getRow(connection, OssUtil.getObjTableName(bucket), objKey);
-      if (result.isEmpty()) {
-        return null;
-      }
-      OssObject object = new OssObject();
-      if (result.containsNonEmptyColumn(OssUtil.OBJ_CONT_CF_BYTES,
-          OssUtil.OBJ_CONT_QUALIFIER)) {
-        ByteArrayInputStream bas = new ByteArrayInputStream(
-            result
-                .getValue(OssUtil.OBJ_CONT_CF_BYTES,
-                    OssUtil.OBJ_CONT_QUALIFIER));
-        object.setContent(bas);
-      } else {
-        String fileDir = OssUtil.FILE_STORE_ROOT + "/" + bucket + "/" + seq;
-        InputStream inputStream = this.fileStore.openFile(fileDir, name);
-        object.setContent(inputStream);
-      }
-      long len = Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-          OssUtil.OBJ_LEN_QUALIFIER));
-      ObjectMetaData metaData = new ObjectMetaData();
-      metaData.setBucket(bucket);
-      metaData.setKey(key);
-      metaData.setLastModifyTime(result.rawCells()[0].getTimestamp());
-      metaData.setLength(len);
-      metaData.setMediaType(Bytes.toString(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-          OssUtil.OBJ_MEDIATYPE_QUALIFIER)));
-      byte[] b = result
-          .getValue(OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_PROPS_QUALIFIER);
-      if (b != null) {
-        metaData.setAttrs(JsonUtil.fromJson(Map.class, Bytes.toString(b)));
-      }
-      object.setMetaData(metaData);
-      return object;
-    }
+
 
     @Override
     public void deleteObject(String bucket, String key) throws Exception {
