@@ -238,281 +238,280 @@ public class OssStoreServiceImpl implements OssStoreService {
     }
 
     @Override
-    public List<OssObjectSummary> list(String bucket, String startKey, String endKey)
-        throws IOException {
+    public void deleteObject(String bucket, String key) throws Exception {
+        if (key.endsWith("/")) {
+            //删除目录 判断目录是否为空
+            if (!isDirEmpty(bucket, key)) {
+                throw new RuntimeException("dir is not empty");
+            }
+            InterProcessMutex lock = null;
+            try {
+                String lockey = key.replaceAll("/", "_");
+                lock = new InterProcessMutex(this.zkClient, "/oss/" + bucket + "/" + lockey); //获取锁
+                lock.acquire();
+                if (!isDirEmpty(bucket, key)) {
+                    throw new RuntimeException("dir is not empty");
+                }
+                //从父目录删除数据
+                String dir1 = key.substring(0, key.lastIndexOf("/"));
+                String name = dir1.substring(dir1.lastIndexOf("/") + 1);
+                if (name.length() > 0) {
+                    //获取父目录
+                    String parent = key.substring(0, key.lastIndexOf(name));
+                    //rowkey = parent
+                    HBaseService.deleteQualifier(connection, OssUtil.getDirTableName(bucket), parent,
+                            OssUtil.DIR_SUBDIR_CF, name);
+                }
+                HBaseService.delete(connection, OssUtil.getDirTableName(bucket), key);
+                return;
+            } finally {
+                if (lock != null) {
+                    lock.release();
+                }
+            }
+        }
+        //删除文件
+        String dir = key.substring(0, key.lastIndexOf("/") + 1);
+        String name = key.substring(key.lastIndexOf("/") + 1);
+        String seqId = this.getDirSeqId(bucket, dir);
+        String objKey = seqId + "_" + name;
+        //文件的length 属性
+        Result result = HBaseService.getRow(connection, OssUtil.getObjTableName(bucket), objKey, OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_LEN_QUALIFIER);
+        if (result.isEmpty()) {
+            return;
+        }
+        long len = Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES,
+                OssUtil.OBJ_LEN_QUALIFIER));
+        if (len > OssUtil.FILE_STORE_THRESHOLD) {
+            //hdfs中删除文件
+            String fileDir = OssUtil.FILE_STORE_ROOT + "/" + bucket + "/" + seqId;
+            this.fileStore.deleteFile(fileDir, name);
+        }
+        HBaseService.delete(connection, OssUtil.getObjTableName(bucket), objKey);
+    }
 
-      String dir1 = startKey.substring(0, startKey.lastIndexOf("/") + 1).trim();
-      if (dir1.length() == 0) {
-        dir1 = "/";
-      }
-      String dir2 = endKey.substring(0, startKey.lastIndexOf("/") + 1).trim();
-      if (dir2.length() == 0) {
-        dir2 = "/";
-      }
-      String name1 = startKey.substring(startKey.lastIndexOf("/") + 1);
-      String name2 = endKey.substring(startKey.lastIndexOf("/") + 1);
-      String seqId = this.getDirSeqId(bucket, dir1);
-      //查询dir1中大于name1的全部文件
-      List<OssObjectSummary> keys = new ArrayList<>();
-      if (seqId != null && name1.length() > 0) {
-        byte[] max = Bytes.createMaxByteArray(100);
-        byte[] tail = Bytes.add(Bytes.toBytes(seqId), max);
-        if (dir1.equals(dir2)) {
-          tail = (seqId + "_" + name2).getBytes();
-        }
-        byte[] start = (seqId + "_" + name1).getBytes();
-        ResultScanner scanner1 = HBaseService
-            .scanner(connection, OssUtil.getObjTableName(bucket), start, tail);
-        Result result = null;
-        while ((result = scanner1.next()) != null) {
-          OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir1);
-          keys.add(summary);
-        }
-        if (scanner1 != null) {
-          scanner1.close();
-        }
-      }
-      //startkey~endkey之间的全部目录
-      ResultScanner scanner2 = HBaseService
-          .scanner(connection, OssUtil.getDirTableName(bucket), startKey, endKey);
-      Result result = null;
-      while ((result = scanner2.next()) != null) {
-        String seqId2 = Bytes.toString(result.getValue(OssUtil.DIR_META_CF_BYTES,
-            OssUtil.DIR_SEQID_QUALIFIER));
-        if (seqId2 == null) {
-          continue;
-        }
-        String dir = Bytes.toString(result.getRow());
-        keys.add(dirObjectToSummary(result, bucket, dir));
-        getDirAllFiles(bucket, dir, seqId2, keys, endKey);
-      }
-      if (scanner2 != null) {
-        scanner2.close();
-      }
-      Collections.sort(keys);
-      return keys;
+    private boolean isDirEmpty(String bucket, String dir) throws IOException {
+        return listDir(bucket, dir, null, 2).getObjectList().size() == 0;
     }
 
     @Override
     public ObjectListResult listDir(String bucket, String dir, String start, int maxCount)
-        throws IOException {
-      if (start == null) {
-        start = "";
-      }
-      Get get = new Get(Bytes.toBytes(dir));
-      get.addFamily(OssUtil.DIR_SUBDIR_CF_BYTES);
-      if (start.length() > 0) {
-        get.setFilter(new QualifierFilter(CompareOp.GREATER_OR_EQUAL,
-            new BinaryComparator(Bytes.toBytes(start))));
-      }
-      int maxCount1 = maxCount + 2;
-      Result dirResult = HBaseService
-          .getRow(connection, OssUtil.getDirTableName(bucket), get);
-      List<OssObjectSummary> subDirs = null;
-      if (!dirResult.isEmpty()) {
-        subDirs = new ArrayList<>();
-        for (Cell cell : dirResult.rawCells()) {
-          OssObjectSummary summary = new OssObjectSummary();
-          byte[] qualifierBytes = new byte[cell.getQualifierLength()];
-          CellUtil.copyQualifierTo(cell, qualifierBytes, 0);
-          String name = Bytes.toString(qualifierBytes);
-          summary.setKey(dir + name + "/");
-          summary.setName(name);
-          summary.setLastModifyTime(cell.getTimestamp());
-          summary.setMediaType("");
-          summary.setBucket(bucket);
-          summary.setLength(0);
-          subDirs.add(summary);
-          if (subDirs.size() >= maxCount1) {
-            break;
-          }
+            throws IOException {
+        if (start == null) {
+            start = "";
         }
-      }
+        //查询目录表
+        Get get = new Get(Bytes.toBytes(dir));
+        get.addFamily(OssUtil.DIR_SUBDIR_CF_BYTES);
+        if (start.length() > 0) {
+            get.setFilter(new QualifierFilter(CompareOp.GREATER_OR_EQUAL,
+                    new BinaryComparator(Bytes.toBytes(start))));
+        }
+        int maxCount1 = maxCount + 2;
+        Result dirResult = HBaseService.getRow(connection, OssUtil.getDirTableName(bucket), get);
+        List<OssObjectSummary> subDirs = null;
+        if (!dirResult.isEmpty()) {
+            subDirs = new ArrayList<>();
+            for (Cell cell : dirResult.rawCells()) {
+                OssObjectSummary summary = new OssObjectSummary();
+                byte[] qualifierBytes = new byte[cell.getQualifierLength()];
+                CellUtil.copyQualifierTo(cell, qualifierBytes, 0);
+                String name = Bytes.toString(qualifierBytes);
+                summary.setKey(dir + name + "/");
+                summary.setName(name);
+                summary.setLastModifyTime(cell.getTimestamp());
+                summary.setMediaType("");
+                summary.setBucket(bucket);
+                summary.setLength(0);
+                subDirs.add(summary);
+                if (subDirs.size() >= maxCount1) {
+                    break;
+                }
+            }
+        }
+        //查询文件表
+        String dirSeq = this.getDirSeqId(bucket, dir);
+        byte[] objStart = Bytes.toBytes(dirSeq + "_" + start);
+        Scan objScan = new Scan();
+        objScan.setRowPrefixFilter(Bytes.toBytes(dirSeq + "_"));
+        objScan.setFilter(new PageFilter(maxCount + 1));
+        objScan.setStartRow(objStart);
+        objScan.setMaxResultsPerColumnFamily(maxCount1);
+        objScan.addFamily(OssUtil.OBJ_META_CF_BYTES);
+        logger.info("scan start: " + Bytes.toString(objStart) + " - ");
+        ResultScanner objScanner = HBaseService.scanner(connection, OssUtil.getObjTableName(bucket), objScan);
+        List<OssObjectSummary> objectSummaryList = new ArrayList<>();
+        Result result = null;
+        while (objectSummaryList.size() < maxCount1 && (result = objScanner.next()) != null) {
+            OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
+            objectSummaryList.add(summary);
+        }
+        if (objScanner != null) {
+            objScanner.close();
+        }
+        logger.info("scan complete: " + Bytes.toString(objStart) + " - ");
+        if (subDirs != null && subDirs.size() > 0) {
+            objectSummaryList.addAll(subDirs);
+        }
+        Collections.sort(objectSummaryList);
+        ObjectListResult listResult = new ObjectListResult();
+        OssObjectSummary nextMarkerObj =
+                objectSummaryList.size() > maxCount ? objectSummaryList.get(objectSummaryList.size() - 1)
+                        : null;
+        if (nextMarkerObj != null) {
+            listResult.setNextMarker(nextMarkerObj.getKey());
+        }
+        if (objectSummaryList.size() > maxCount) {
+            objectSummaryList = objectSummaryList.subList(0, maxCount);
+        }
+        listResult.setMaxKeyNumber(maxCount);
+        if (objectSummaryList.size() > 0) {
+            listResult.setMinKey(objectSummaryList.get(0).getKey());
+            listResult.setMaxKey(objectSummaryList.get(objectSummaryList.size() - 1).getKey());
+        }
+        listResult.setObjectCount(objectSummaryList.size());
+        listResult.setObjectList(objectSummaryList);
+        listResult.setBucket(bucket);
 
-      String dirSeq = this.getDirSeqId(bucket, dir);
-      byte[] objStart = Bytes.toBytes(dirSeq + "_" + start);
-      Scan objScan = new Scan();
-      objScan.setRowPrefixFilter(Bytes.toBytes(dirSeq + "_"));
-      objScan.setFilter(new PageFilter(maxCount + 1));
-      objScan.setStartRow(objStart);
-      objScan.setMaxResultsPerColumnFamily(maxCount1);
-      objScan.addFamily(OssUtil.OBJ_META_CF_BYTES);
-      logger.info("scan start: " + Bytes.toString(objStart) + " - ");
-      ResultScanner objScanner = HBaseService
-          .scanner(connection, OssUtil.getObjTableName(bucket), objScan);
-      List<OssObjectSummary> objectSummaryList = new ArrayList<>();
-      Result result = null;
-      while (objectSummaryList.size() < maxCount1 && (result = objScanner.next()) != null) {
-        OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
-        objectSummaryList.add(summary);
-      }
-      if (objScanner != null) {
-        objScanner.close();
-      }
-      logger.info("scan complete: " + Bytes.toString(objStart) + " - ");
-      if (subDirs != null && subDirs.size() > 0) {
-        objectSummaryList.addAll(subDirs);
-      }
-      Collections.sort(objectSummaryList);
-      ObjectListResult listResult = new ObjectListResult();
-      OssObjectSummary nextMarkerObj =
-          objectSummaryList.size() > maxCount ? objectSummaryList.get(objectSummaryList.size() - 1)
-              : null;
-      if (nextMarkerObj != null) {
-        listResult.setNextMarker(nextMarkerObj.getKey());
-      }
-      if (objectSummaryList.size() > maxCount) {
-        objectSummaryList = objectSummaryList.subList(0, maxCount);
-      }
-      listResult.setMaxKeyNumber(maxCount);
-      if (objectSummaryList.size() > 0) {
-        listResult.setMinKey(objectSummaryList.get(0).getKey());
-        listResult.setMaxKey(objectSummaryList.get(objectSummaryList.size() - 1).getKey());
-      }
-      listResult.setObjectCount(objectSummaryList.size());
-      listResult.setObjectList(objectSummaryList);
-      listResult.setBucket(bucket);
-
-      return listResult;
+        return listResult;
     }
+
+    @Override
+    public List<OssObjectSummary> list(String bucket, String startKey, String endKey)
+        throws IOException {
+
+        String dir1 = startKey.substring(0, startKey.lastIndexOf("/") + 1).trim();
+        if (dir1.length() == 0) {
+            dir1 = "/";
+        }
+        String dir2 = endKey.substring(0, startKey.lastIndexOf("/") + 1).trim();
+        if (dir2.length() == 0) {
+            dir2 = "/";
+        }
+        String name1 = startKey.substring(startKey.lastIndexOf("/") + 1);
+        String name2 = endKey.substring(startKey.lastIndexOf("/") + 1);
+        String seqId = this.getDirSeqId(bucket, dir1);
+        //查询dir1中大于name1的全部文件
+        List<OssObjectSummary> keys = new ArrayList<>();
+        if (seqId != null && name1.length() > 0) {
+            byte[] max = Bytes.createMaxByteArray(100);
+            byte[] tail = Bytes.add(Bytes.toBytes(seqId), max);
+            if (dir1.equals(dir2)) {
+                tail = (seqId + "_" + name2).getBytes();
+            }
+            byte[] start = (seqId + "_" + name1).getBytes();
+            ResultScanner scanner1 = HBaseService.scanner(connection, OssUtil.getObjTableName(bucket), start, tail);
+            Result result = null;
+            while ((result = scanner1.next()) != null) {
+                OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir1);
+                keys.add(summary);
+            }
+            if (scanner1 != null) {
+                scanner1.close();
+            }
+        }
+        //startkey~endkey之间的全部目录
+        ResultScanner scanner2 = HBaseService.scanner(connection, OssUtil.getDirTableName(bucket), startKey, endKey);
+        Result result = null;
+        while ((result = scanner2.next()) != null) {
+            String seqId2 = Bytes.toString(result.getValue(OssUtil.DIR_META_CF_BYTES,
+                OssUtil.DIR_SEQID_QUALIFIER));
+            if (seqId2 == null) {
+                continue;
+            }
+            String dir = Bytes.toString(result.getRow());
+            keys.add(dirObjectToSummary(result, bucket, dir));
+            getDirAllFiles(bucket, dir, seqId2, keys, endKey);
+        }
+        if (scanner2 != null) {
+            scanner2.close();
+        }
+        Collections.sort(keys);
+        return keys;
+    }
+
 
     @Override
     public ObjectListResult listByPrefix(String bucket, String dir, String keyPrefix, String start,
         int maxCount) throws IOException {
-      if (start == null) {
-        start = "";
-      }
-      FilterList filterList = new FilterList(Operator.MUST_PASS_ALL);
-      filterList.addFilter(new ColumnPrefixFilter(keyPrefix.getBytes()));
-      if (start.length() > 0) {
-        filterList.addFilter(new QualifierFilter(CompareOp.GREATER_OR_EQUAL,
-            new BinaryComparator(Bytes.toBytes(start))));
-      }
-      int maxCount1 = maxCount + 2;
-      Result dirResult = HBaseService
-          .getRow(connection, OssUtil.getDirTableName(bucket), dir, filterList);
-      List<OssObjectSummary> subDirs = null;
-      if (!dirResult.isEmpty()) {
-        subDirs = new ArrayList<>();
-        for (Cell cell : dirResult.rawCells()) {
-          OssObjectSummary summary = new OssObjectSummary();
-          byte[] qualifierBytes = new byte[cell.getQualifierLength()];
-          CellUtil.copyQualifierTo(cell, qualifierBytes, 0);
-          String name = Bytes.toString(qualifierBytes);
-          summary.setKey(dir + name + "/");
-          summary.setName(name);
-          summary.setLastModifyTime(cell.getTimestamp());
-          summary.setMediaType("");
-          summary.setBucket(bucket);
-          summary.setLength(0);
-          subDirs.add(summary);
-          if (subDirs.size() >= maxCount1) {
-            break;
-          }
+        if (start == null) {
+            start = "";
         }
-      }
+        FilterList filterList = new FilterList(Operator.MUST_PASS_ALL);
+        filterList.addFilter(new ColumnPrefixFilter(keyPrefix.getBytes()));
+        if (start.length() > 0) {
+            filterList.addFilter(new QualifierFilter(CompareOp.GREATER_OR_EQUAL,
+                new BinaryComparator(Bytes.toBytes(start))));
+        }
+        int maxCount1 = maxCount + 2;
+        Result dirResult = HBaseService
+            .getRow(connection, OssUtil.getDirTableName(bucket), dir, filterList);
+        List<OssObjectSummary> subDirs = null;
+        if (!dirResult.isEmpty()) {
+            subDirs = new ArrayList<>();
+            for (Cell cell : dirResult.rawCells()) {
+                OssObjectSummary summary = new OssObjectSummary();
+                byte[] qualifierBytes = new byte[cell.getQualifierLength()];
+                CellUtil.copyQualifierTo(cell, qualifierBytes, 0);
+                String name = Bytes.toString(qualifierBytes);
+                summary.setKey(dir + name + "/");
+                summary.setName(name);
+                summary.setLastModifyTime(cell.getTimestamp());
+                summary.setMediaType("");
+                summary.setBucket(bucket);
+                summary.setLength(0);
+                subDirs.add(summary);
+                if (subDirs.size() >= maxCount1) {
+                    break;
+                }
+            }
+        }
 
-      String dirSeq = this.getDirSeqId(bucket, dir);
-      byte[] objStart = Bytes.toBytes(dirSeq + "_" + start);
-      Scan objScan = new Scan();
-      objScan.setRowPrefixFilter(Bytes.toBytes(dirSeq + "_" + keyPrefix));
-      objScan.setFilter(new PageFilter(maxCount + 1));
-      objScan.setStartRow(objStart);
-      objScan.setMaxResultsPerColumnFamily(maxCount1);
-      objScan.addFamily(OssUtil.OBJ_META_CF_BYTES);
-      logger.info("scan start: " + Bytes.toString(objStart) + " - ");
-      ResultScanner objScanner = HBaseService
-          .scanner(connection, OssUtil.getObjTableName(bucket), objScan);
-      List<OssObjectSummary> objectSummaryList = new ArrayList<>();
-      Result result = null;
-      while (objectSummaryList.size() < maxCount1 && (result = objScanner.next()) != null) {
-        OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
-        objectSummaryList.add(summary);
-      }
-      if (objScanner != null) {
-        objScanner.close();
-      }
-      logger.info("scan complete: " + Bytes.toString(objStart) + " - ");
-      if (subDirs != null && subDirs.size() > 0) {
-        objectSummaryList.addAll(subDirs);
-      }
-      Collections.sort(objectSummaryList);
-      ObjectListResult listResult = new ObjectListResult();
-      OssObjectSummary nextMarkerObj =
-          objectSummaryList.size() > maxCount ? objectSummaryList.get(objectSummaryList.size() - 1)
+        String dirSeq = this.getDirSeqId(bucket, dir);
+        byte[] objStart = Bytes.toBytes(dirSeq + "_" + start);
+        Scan objScan = new Scan();
+        objScan.setRowPrefixFilter(Bytes.toBytes(dirSeq + "_" + keyPrefix));
+        objScan.setFilter(new PageFilter(maxCount + 1));
+        objScan.setStartRow(objStart);
+        objScan.setMaxResultsPerColumnFamily(maxCount1);
+        objScan.addFamily(OssUtil.OBJ_META_CF_BYTES);
+        logger.info("scan start: " + Bytes.toString(objStart) + " - ");
+        ResultScanner objScanner = HBaseService
+            .scanner(connection, OssUtil.getObjTableName(bucket), objScan);
+        List<OssObjectSummary> objectSummaryList = new ArrayList<>();
+        Result result = null;
+        while (objectSummaryList.size() < maxCount1 && (result = objScanner.next()) != null) {
+            OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
+            objectSummaryList.add(summary);
+        }
+        if (objScanner != null) {
+            objScanner.close();
+        }
+        logger.info("scan complete: " + Bytes.toString(objStart) + " - ");
+        if (subDirs != null && subDirs.size() > 0) {
+            objectSummaryList.addAll(subDirs);
+        }
+        Collections.sort(objectSummaryList);
+        ObjectListResult listResult = new ObjectListResult();
+        OssObjectSummary nextMarkerObj =
+            objectSummaryList.size() > maxCount ? objectSummaryList.get(objectSummaryList.size() - 1)
               : null;
-      if (nextMarkerObj != null) {
-        listResult.setNextMarker(nextMarkerObj.getKey());
-      }
-      if (objectSummaryList.size() > maxCount) {
-        objectSummaryList = objectSummaryList.subList(0, maxCount);
-      }
-      listResult.setMaxKeyNumber(maxCount);
-      if (objectSummaryList.size() > 0) {
-        listResult.setMinKey(objectSummaryList.get(0).getKey());
-        listResult.setMaxKey(objectSummaryList.get(objectSummaryList.size() - 1).getKey());
-      }
-      listResult.setObjectCount(objectSummaryList.size());
-      listResult.setObjectList(objectSummaryList);
-      listResult.setBucket(bucket);
-
-      return listResult;
-    }
-
-
-
-    @Override
-    public void deleteObject(String bucket, String key) throws Exception {
-      if (key.endsWith("/")) {
-        //check sub dir and current dir files.
-        if (!isDirEmpty(bucket, key)) {
-          throw new RuntimeException("dir is not empty");
+        if (nextMarkerObj != null) {
+            listResult.setNextMarker(nextMarkerObj.getKey());
         }
-        InterProcessMutex lock = null;
-        try {
-          String lockey = key.replaceAll("/", "_");
-          lock = new InterProcessMutex(this.zkClient, "/oss/" + bucket + "/" + lockey);
-          lock.acquire();
-          if (!isDirEmpty(bucket, key)) {
-            throw new RuntimeException("dir is not empty");
-          }
-          String dir1 = key.substring(0, key.lastIndexOf("/"));
-          String name = dir1.substring(dir1.lastIndexOf("/") + 1);
-          if (name.length() > 0) {
-            String parent = key.substring(0, key.lastIndexOf(name));
-            HBaseService
-                .deleteQualifier(connection, OssUtil.getDirTableName(bucket), parent,
-                    OssUtil.DIR_SUBDIR_CF, name);
-          }
-          HBaseService.delete(connection, OssUtil.getDirTableName(bucket), key);
-          return;
-        } finally {
-          if (lock != null) {
-            lock.release();
-          }
+        if (objectSummaryList.size() > maxCount) {
+            objectSummaryList = objectSummaryList.subList(0, maxCount);
         }
-      }
-      String dir = key.substring(0, key.lastIndexOf("/") + 1);
-      String name = key.substring(key.lastIndexOf("/") + 1);
-      String seqId = this.getDirSeqId(bucket, dir);
-      String objKey = seqId + "_" + name;
-      Result result = HBaseService
-          .getRow(connection, OssUtil.getObjTableName(bucket), objKey,
-              OssUtil.OBJ_META_CF_BYTES, OssUtil.OBJ_LEN_QUALIFIER);
-      if (result.isEmpty()) {
-        return;
-      }
-      long len = Bytes.toLong(result.getValue(OssUtil.OBJ_META_CF_BYTES,
-          OssUtil.OBJ_LEN_QUALIFIER));
-      if (len > OssUtil.FILE_STORE_THRESHOLD) {
-        String fileDir = OssUtil.FILE_STORE_ROOT + "/" + bucket + "/" + seqId;
-        this.fileStore.deleteFile(fileDir, name);
-      }
-      HBaseService.delete(connection, OssUtil.getObjTableName(bucket), objKey);
-    }
+        listResult.setMaxKeyNumber(maxCount);
+        if (objectSummaryList.size() > 0) {
+            listResult.setMinKey(objectSummaryList.get(0).getKey());
+            listResult.setMaxKey(objectSummaryList.get(objectSummaryList.size() - 1).getKey());
+        }
+        listResult.setObjectCount(objectSummaryList.size());
+        listResult.setObjectList(objectSummaryList);
+        listResult.setBucket(bucket);
 
-    private boolean isDirEmpty(String bucket, String dir) throws IOException {
-      return listDir(bucket, dir, null, 2).getObjectList().size() == 0;
+        return listResult;
     }
 
 
@@ -520,29 +519,29 @@ public class OssStoreServiceImpl implements OssStoreService {
     private void getDirAllFiles(String bucket, String dir, String seqId, List<OssObjectSummary> keys,
         String endKey) throws IOException {
 
-      byte[] max = Bytes.createMaxByteArray(100);
-      byte[] tail = Bytes.add(Bytes.toBytes(seqId), max);
-      if (endKey.startsWith(dir)) {
-        String endKeyLeft = endKey.replace(dir, "");
-        String fileNameMax = endKeyLeft;
-        if (endKeyLeft.indexOf("/") > 0) {
-          fileNameMax = endKeyLeft.substring(0, endKeyLeft.indexOf("/"));
+        byte[] max = Bytes.createMaxByteArray(100);
+        byte[] tail = Bytes.add(Bytes.toBytes(seqId), max);
+        if (endKey.startsWith(dir)) {
+            String endKeyLeft = endKey.replace(dir, "");
+            String fileNameMax = endKeyLeft;
+            if (endKeyLeft.indexOf("/") > 0) {
+            fileNameMax = endKeyLeft.substring(0, endKeyLeft.indexOf("/"));
+            }
+            tail = Bytes.toBytes(seqId + "_" + fileNameMax);
         }
-        tail = Bytes.toBytes(seqId + "_" + fileNameMax);
-      }
 
-      Scan scan = new Scan(Bytes.toBytes(seqId), tail);
-      scan.setFilter(OssUtil.OBJ_META_SCAN_FILTER);
-      ResultScanner scanner = HBaseService
-          .scanner(connection, OssUtil.getObjTableName(bucket), scan);
-      Result result = null;
-      while ((result = scanner.next()) != null) {
-        OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
-        keys.add(summary);
-      }
-      if (scanner != null) {
-        scanner.close();
-      }
+        Scan scan = new Scan(Bytes.toBytes(seqId), tail);
+        scan.setFilter(OssUtil.OBJ_META_SCAN_FILTER);
+        ResultScanner scanner = HBaseService
+            .scanner(connection, OssUtil.getObjTableName(bucket), scan);
+        Result result = null;
+        while ((result = scanner.next()) != null) {
+            OssObjectSummary summary = this.resultToObjectSummary(result, bucket, dir);
+            keys.add(summary);
+        }
+        if (scanner != null) {
+            scanner.close();
+        }
     }
 
     //读取文件的属性  转化为OssObjectSummary
