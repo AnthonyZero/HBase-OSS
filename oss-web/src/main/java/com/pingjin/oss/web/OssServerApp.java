@@ -23,7 +23,7 @@ import org.springframework.web.servlet.config.annotation.*;
 @ComponentScan({"com.pingjin.oss.*"})
 @SpringBootApplication
 @Import({OssDataSourceConfig.class, OssServerBeanConfiguration.class})
-@MapperScan("com.imooc.bigdata")
+//@MapperScan("com.pingjin.oss.**.dao")
 public class OssServerApp {
 
     @Autowired
