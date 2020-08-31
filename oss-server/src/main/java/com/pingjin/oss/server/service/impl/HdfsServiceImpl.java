@@ -16,6 +16,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URL;
 
 
 public class HdfsServiceImpl implements HdfsService {
@@ -30,17 +31,21 @@ public class HdfsServiceImpl implements HdfsService {
         if (confDir == null) {
             confDir = System.getProperty("HADOOP_CONF_DIR");
         }
-        OssConfiguration hosConfiguration = OssConfiguration.getConfiguration();
-        String hdfsUri = hosConfiguration.getString("hadoop.hdfs.uri");
+        //hadoop 配置
+        OssConfiguration ossConfiguration = OssConfiguration.getConfiguration();
+        String hadoopHost = ossConfiguration.getString("hadoop.host");
+        String hdfsUri = ossConfiguration.getString("hadoop.hdfs.uri");
         if (confDir == null) {
-            confDir = hosConfiguration.getString("hadoop.conf.dir"); //存放core-site.xml和hdfs-site.xml的路径
+            confDir = ossConfiguration.getString("hadoop.conf.dir"); //存放core-site.xml和hdfs-site.xml的路径
         }
-        if (!new File(confDir).exists()) {
-            throw new FileNotFoundException(confDir);
-        }
+//        if (!new File(confDir).exists()) { //不用本地地址
+//            throw new FileNotFoundException(confDir);
+//        }
         Configuration conf = new Configuration();
-        conf.addResource(new Path(confDir + "/core-site.xml"));
-        conf.addResource(new Path(confDir + "/hdfs-site.xml"));
+        //conf.addResource(new Path(confDir + "/core-site.xml"));
+        //conf.addResource(new Path(confDir + "/hdfs-site.xml"));
+        conf.addResource(new Path(new URL("file", hadoopHost, confDir + "/core-site.xml").toURI()));
+        conf.addResource(new Path(new URL("file", hadoopHost, confDir + "/hdfs-site.xml").toURI()));
     //    conf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
     //    conf.set("fs.file.impl", org.apache.hadoop.fs.LocalFileSystem.class.getName());
         fileSystem = FileSystem.get(new URI(hdfsUri), conf);
