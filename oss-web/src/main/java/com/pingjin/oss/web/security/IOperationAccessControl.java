@@ -8,6 +8,7 @@ public interface IOperationAccessControl {
     UserInfo checkLogin(String userName, String password);
 
     boolean checkSystemRole(SystemRole systemRole1, SystemRole systemRole2);
+
     boolean checkSystemRole(SystemRole systemRole1, String userId);
 
     boolean checkTokenOwner(String userName, String token);
