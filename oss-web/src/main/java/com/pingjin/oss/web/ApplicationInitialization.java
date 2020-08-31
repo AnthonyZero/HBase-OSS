@@ -19,6 +19,7 @@ public class ApplicationInitialization implements ApplicationRunner {
     @Autowired
     private UserInfoService userService;
 
+    //应用启动创建 系统超级账号
     @Override
     public void run(ApplicationArguments args) throws Exception {
         UserInfo userInfo = userService.getUserInfoByName(SysConstant.SYSTEM_USER);
