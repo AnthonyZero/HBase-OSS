@@ -57,6 +57,7 @@ public class OssController extends BaseController {
             try {
                 ossStoreService.createBucketStore(bucketName);
             } catch (IOException ioe) {
+                ioe.printStackTrace();
                 bucketService.deleteBucket(bucketName);
                 return  "create bucket error";
             }
