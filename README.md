@@ -28,6 +28,6 @@ Spring Boot+HBase分布式文件存储
    * 根据目录地址和文件名可以获取到file的RowKey
    * 根据file的RowKey快速的找到这个文件,读取对应列族中存储的内容（二进制）
 
-## HBASE 数据截图
+## HBase 数据截图
 ![hbaseoss2.png](https://i.loli.net/2020/10/02/1t6QlovXyKcbeDn.png)
    
