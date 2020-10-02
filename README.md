@@ -1,5 +1,6 @@
 ## HBase-OSS
 Spring Boot+HBase分布式文件存储
+![hbaseoss3.png](https://i.loli.net/2020/10/02/oBDVKbtduOFJ3yX.png)
 
 ## 软件环境
 * SpringBoot 1.4.2.RELEASE
@@ -25,3 +26,7 @@ Spring Boot+HBase分布式文件存储
 5. 文件下载
    * 根据目录地址和文件名可以获取到file的RowKey
    * 根据file的RowKey快速的找到这个文件,读取对应列族中存储的内容（二进制）
+
+## HBASE 数据截图
+![hbaseoss2.png](https://i.loli.net/2020/10/02/1t6QlovXyKcbeDn.png)
+   
