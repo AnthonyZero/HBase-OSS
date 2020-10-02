@@ -16,6 +16,7 @@ Spring Boot+HBase分布式文件存储
 3. 用户创建Bucket的时候，默认将自己的用户ID作为Token对自己授权
 
 ## 文件管理设计
+![hbaseoss1.png](https://i.loli.net/2020/10/02/lQSAt3I1fuKcdFC.png)
 1. Bucket与Token用户等信息存储到Mysql数据库，文件和文件夹存储到HBase
 2. 文件存储基于HBase可以快速的读取指定RowKey的文件
 3. 基于HBase过滤器实现前缀，起止文件名的的过滤操作
