@@ -14,6 +14,7 @@
         <module>oss-common</module>
         <module>oss-server</module>
         <module>oss-web</module>
+        <module>oss-sdk</module>
     </modules>
 
     <properties>
